@@ -29,7 +29,7 @@ It has an "Optimize" section in which you can Broadcast the data. As mentioned, 
 
 ## HDInsight & Databricks
 
-### Prepare Data for HDInsight & Databricks
+## Prepare Data for HDInsight
 
 The Data Flows from Azure Data Factory execute in Spark which works on distributed computing similar to HDInsight. In this section we will be learning about the HDInsight activity from ADF rather than learn about HDInsight or Hadoop as a whole
 
@@ -54,8 +54,6 @@ HDInsight uses Ambary for the full management of our cluster. There you can look
 - Stop/restart/start services
 - Query Hive tables (you can also use different softwares to interact with the Hive tables, HDInsights supports JDBC connections)
 
-## Data Transformation Assignment
-
 ### Explaining the Hive Script
 
 [Script File](covid_transform_testing.hql)
@@ -71,3 +69,26 @@ HDInsight uses Ambary for the full management of our cluster. There you can look
    - Spark
    - Streaming
 6. Within the activity in ADF, you can create a link service to either use your own HDInsight cluster, or an On-demand cluster (will create a cluster and destroy it when it's done processing).
+
+## Working with Databricks
+
+1. Create a Databricks service: You can create it using the Azure portal. Once created there are not many configurations that can be applied within Azure portal since most of it is contained inside Databricks
+
+2. Create a Databricks cluster: A cluster is a set of computation resources and configurations on which you can run your workload. They usually have one driver node and one or more worker nodes. On very node we will have Virtual Machine (VM) images with pre-install libraries that we can specify while we are creating the cluster. The driver node plus all the worker nodes are known as the Databricks Runtime. These are the two types of clusters in Databricks:
+
+   - All purpose/Interactive clusters: Analyze the data interactively using notebooks and collaborate with other team members. They are manually created and you can manually create and restart them.
+   - Job Clusters: They are created by the Databricks Job Scheduler when we run a Job. They are automatically terminated at the end of the execution.
+
+3. Mount a Storage Account:
+
+   - Create an Azure Service Principal: At the Portal we can look for it typing "Microsoft Entra ID".
+     ![alt text](image.png)
+     Once there, look for "App registrations" to create a new registration for service principal.
+     ![alt text](image-1.png)
+   - Grant access for the Data Lake to Azure Service Principal: When you have created the new Registration, you need to store thee things which are: Tenant ID, Application ID and you will need to create a new secret in order to connect. Once you have done that, you need to go to the storage account and enter the IAM control panel. There you will need to create the role in order to connect the storage account with your Service Principal.
+     ![alt text](image-2.png)
+   - Mount the Storage Account in Databricks via the Service Principal: This step will be done on the Databricks Workspace. There is a python script that contain all the necessary steps to Mount the Storage Account [you can look at it here](mount_storage.py). Inside that script you will need the Client ID, Tenant ID and the Secret that you created when adding the new register (Service Principal). Keep in mind that for the Secret you would normally need to use The Key Vault.
+
+4. Create your transformations script: In the python script you will need to replace the storage account name with the one you created. [Click here to look at the script](transform_population_data.py)
+
+5. Create a Pipeline: In order to use the Activity you will need a new Linked Service to connect with your Databricks Workspace. When creating the Linked Service, you will have the option to use an Existing interactive cluster, create a Job Cluster or use an Existing Instance Pool.
