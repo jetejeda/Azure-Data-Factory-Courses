@@ -92,3 +92,13 @@ HDInsight uses Ambary for the full management of our cluster. There you can look
 4. Create your transformations script: In the python script you will need to replace the storage account name with the one you created. [Click here to look at the script](transform_population_data.py)
 
 5. Create a Pipeline: In order to use the Activity you will need a new Linked Service to connect with your Databricks Workspace. When creating the Linked Service, you will have the option to use an Existing interactive cluster, create a Job Cluster or use an Existing Instance Pool.
+
+## Getting ready for a production environment
+
+### Working with triggers
+
+When working with triggers you can add dependencies between different triggers using the advanced settings from the the trigger that will have dependencies.
+
+The triggers with dependencies will start but they will be waiting for the completion of the dependency trigger. For the dependencies you can specify the OFFSET (from what datetime we want the data) and the WINDOW SIZE (how much time)
+
+[Documentation](https://learn.microsoft.com/en-us/azure/data-factory/tumbling-window-trigger-dependency)
