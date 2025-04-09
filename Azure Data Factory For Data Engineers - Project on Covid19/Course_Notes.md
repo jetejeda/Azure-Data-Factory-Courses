@@ -102,3 +102,64 @@ When working with triggers you can add dependencies between different triggers u
 The triggers with dependencies will start but they will be waiting for the completion of the dependency trigger. For the dependencies you can specify the OFFSET (from what datetime we want the data) and the WINDOW SIZE (how much time)
 
 [Documentation](https://learn.microsoft.com/en-us/azure/data-factory/tumbling-window-trigger-dependency)
+
+## Monitoring
+
+### What to monitor
+
+- Azure Data Factory Resource
+- Integration runtime (CPU utilization, available memory)
+- Trigger runs
+- Pipeline runs
+- Activity runs
+
+#### Data Factory Monitor
+
+ADF has it's own monitor capabilities. It can monitor the status of pipelines/triggers. It can be used to re-run failed pipelines/triggers and with it you can also send alerts from base level metrics. All the pipeline runs are stored only for 45 days. It only allow us to monitor a single ADF (since it runs within the ADF resource)
+
+#### Azure Monitor
+
+It provides:
+
+- Route the diagnostic data to other storage solutions
+- Richer diagnostic data
+- Write complex queries and custom reporting
+- Report across multiple data factories
+
+You can track specific metrics, create custom alerts, send notifications and create dashboards to better understand the Azure Data Factory metrics.
+
+#### Re-Run Failed Pipelines
+
+When working with ADF at the monitor section we can take a look at all the Pipeline and Triggers runs. If a pipeline failed we have two options which are:
+
+- Re-run the complete pipeline
+- Re-run the pipeline starting from the failed activity.
+
+When you re-run a trigger it will restart the complete pipeline's execution.
+
+#### Azure Monitor and ADF
+
+When working with Azure monitor, you can select an storage to keep all your diagnostics data. In order to do so yo need to:
+
+1. Enter Azure Monitor
+2. Enter to Diagnostic settings
+3. Select a resource
+4. Click on "Add diagnostic setting"
+5. Select the logs and metrics that you want to store
+6. Choose a destination (Analytics workspace, Archive or storage account, stream to an Event Hub)
+7. When working with an storage account you can set a Retention policy in days. If you leave it as Zero, the data will be stored forever. This process will create a container for each metric you selected.
+
+## Log Analytics
+
+1. First you have to create a Log Analytics Workspace resource on the Azure Portal.
+2. Within your ADF go to Diagnostic settings
+3. Click on "Add diagnostic setting"
+4. Select the logs and metrics that you want to store
+5. Choose as destination the Log Analytics Workspace and select the resource you just created
+6. When selecting this destination, you will have two options>
+   - Azure diagnostics: Puts all the logs into one table
+   - Resource specific: Separate tables for each of the metrics and each of the logs.
+
+In order to query the data you will need to use Kusto Query Language (KQL).
+
+[Kusto query Language documentation](https://learn.microsoft.com/en-us/kusto/query/kql-quick-reference?view=azure-data-explorer&preserve-view=true)
