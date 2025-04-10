@@ -163,3 +163,11 @@ When working with Azure monitor, you can select an storage to keep all your diag
 In order to query the data you will need to use Kusto Query Language (KQL).
 
 [Kusto query Language documentation](https://learn.microsoft.com/en-us/kusto/query/kql-quick-reference?view=azure-data-explorer&preserve-view=true)
+
+## Working with Power BI reports
+
+Power BI is only available for Windows OS.
+
+When working with Power BI you can create several views from many different sources. You can load several data sources at the time and use the fields of each table/data_source. You can also inspect data and create data models.
+
+Power BI will be useful to both data analytics and log analytics. You can connect to external sources by providing access keys or credentials.
