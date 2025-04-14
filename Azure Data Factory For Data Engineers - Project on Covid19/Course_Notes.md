@@ -262,3 +262,35 @@ Is basically a SaaS offered by Microsoft on the Azure cloud with all the necessa
   - Stablish your project's visibility
   - Select a version control
   - Define a Work Item Process which will be important for our boards.
+
+### Set-up ADF for CI/CD behavior
+
+When working with CI/CD on ADF it's common to have at least two ADF's but you can add one or more test ADF if you need them. It's a best practice to keep these ADF in separate resource groups which are specific for their environments.
+
+They typical structure looks like this:
+
+1. Dev ADF: Will have git enabled so that we can do continuous integration of the code. This code will be deployed by a release pipeline via an ARM template
+2. Test ADF: For all the testing required for a production environment. You don't need to enable git in this ADF.
+3. Prod ADF: Tested ADF resources and productive code. You don't need to enable git in this ADF.
+
+### ADF Git Configuration
+
+There are many branching strategies to work with Git. The recommendation is to have a main/master branch that will work as the staring point for each feature branch. When finished working on the new feature (from the feature branch) you create a Pull Request (PR) to then merge that feature branch into the main branch. The main branch should be the only one from which we can publish to the ADF repository. ADF also knows this branch as the collaboration branch. Once you publish the code from the main branch, that creates a adf_publish branch that has the ARM template.
+
+#### Steps to enable a Git configuration in ADF
+
+1. Create a Git repository in Azure DevOps. (you can also use ADF to create a Git repository for you)
+2. Enable a branch policy for the main branch in order to require a PR in order to commit changes to the collaboration branch (main)
+3. Go to ADF and configure git.
+4. Enter the ADF Studio
+5. Click on the Author icon and select "Set up code repository". You can also access to this configuration via the manage icon and clicking the "Git configuration" from the "Source Control" options.
+6. Click Configure
+7. Select the repository type (Azure DevOps Git for our scenario)
+8. Select the Active Directory that contains your Azure DevOps organization
+9. Select your DevOps organization name
+10. Select your project name
+11. Select the repository name. If you type a repository name that doesn't actually exist within your project, it will be automatically created in Azure DevOps.
+12. Select your Collaboration branch (main/master).
+13. Define a Publish branch. It will contain the ARM template after each publish from the collaboration branch.
+14. You have the option to import any existing resources to the repository. This is useful if you have been using ADF in Live Mode but you wanna bring each resource into Git.
+15. Click apply. You will gain connection to the repo but will get an error related to the main branch (it's because of the branch policy).
