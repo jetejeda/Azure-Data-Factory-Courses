@@ -171,3 +171,94 @@ Power BI is only available for Windows OS.
 When working with Power BI you can create several views from many different sources. You can load several data sources at the time and use the fields of each table/data_source. You can also inspect data and create data models.
 
 Power BI will be useful to both data analytics and log analytics. You can connect to external sources by providing access keys or credentials.
+
+## Continuous Integration & Continuous Deployment/Delivery (CI/CD)
+
+In this section we will look at how to configure git with Azure Data Factory. We will also look at the build and release pipeline to enable CI/CD features of the data factory code.
+
+![alt text](image-3.png)
+
+### What is DevOps
+
+It's a DevOps practice to achieve faster time to market as well as increased confidence in delivering software applications.
+
+DevOps it's typically seen as two separate teams/areas Development(Dev) and operations(Ops). The development team is responsible for writing code and testing it. Operations team are responsible for deploying and supporting the code in production. Each team had it's own issues such as communication issues between teams, conflict of interest due to their own team's priorities, lack of automation. As a result, companies couldn't bring products to market as quickly as they wanted to and also, when delivered, the quality of the product wasn't as expected.
+
+In order to solve those issues, companies wanted to join the Development and Operations teams together. The intersection between these two teams is called DevOps. DevOps looks forward to increase the speed and quality of the software development and delivery. CI/CD helps to bring together the development, the deployment of the application and removes the issues faced by the siloed teams. It also increases the time to market speed and the quality of the software being delivered. It's also related to automation not only for the integration and deployment of the code, but also automated testing and monitoring.
+
+### What is CI/CD
+
+When you have an idea for a software application you go through the following steps (as a cycle):
+
+1. Planning: Gather requirements, create user stories, breakdown tasks and plan a sprint
+2. Coding: By development team
+3. Build: The code gets built
+4. Test: Testing the code we just built
+5. Release: A new tested version of the code
+6. Deployment: To each environment
+7. Monitor: The application
+8. Improvement: For quality
+
+When we are talking about Continuous Integration we are referring to the steps 2 to 4. While developing applications, must of the time, there will be more than one developer working at the time. Therefore, we need to continuously integrate the code to a source control system. Build is taken to every code merged, also everything that was merged has to pass automated testing.
+
+When we are talking about Continuous Deployment/Delivery, we are talking about releasing and deploying the tested code. Some companies tend to continuously deploy to production, some others tend to have a quality gate or an approval process (manual steps).
+
+### CI/CD in Azure Data Factory
+
+- Behind the scenes every object in ADF can be represented by a JSON file, so that's the code.
+- When you build an ADF project, you get an Azure Resource Manager (ARM) template. ARM is Microsoft's deployment and management service for Azure. The ARM template contains the configuration of a project in JSON format, therefore, we can use it to deploy our project to other environments.
+- It's not easy to automate testing for integration tools such as ADF. So many projects tend to rely on manual testing
+- We release and deploy the ARM template to the higher environments such as test and production.
+
+The practice of CI/CD for ADF components has been evolving over time. At the beginning, Microsoft's recommendation was to do a manual build (using the publish button) and have an automated deployment using release pipelines. The bast majority of the projects are still following this solution, but Microsoft has released a package to do an automated build which could be used in a DevOps built pipeline (fully automated).
+
+Going deeper with the two processes:
+
+1. Using ADF Publish: The dev used ADF studio to create the necessary data factory objects (pipelines, datasets, triggers, etc.). He then debugged the pipelines. Once he was happy with the changes he clicked on the Publish button which carried out the validation of the objects and if there were no errors, it then stored the objects to the ADF repository.
+
+**Key points:**
+
+- We directly connected ADF Studio to the ADF repository
+- We made all the changes on the ADF repository
+- This way of connecting to the ADF repository is referred to as "Live Mode"
+- When working with more than one dev there is a high risk of overlapping pipelines, due to not having a version control
+- Lack of a version control so we cannot roll back changes or perform reviews
+
+2. With git mode: It's likely that we will have more than one dev so we need to have a solution where the devs can collaborate. In order to have a version control and have the ability to perform roll backs, reviews and collaborative environments we need to enable a source control solution. We can connect ADF Studio to a source control system (Git or Azure DevOps by the time). When in this mode, developers can create several feature branches and work collaboratively. Once the feature branch is merged to the master branch we can do a publish to the Data Factory. The publish option not only publishes the changes to the ADF dev repository, **but it also creates another branch in git called ADF publish. This branch will contain the ARM templates**
+
+In summary, the publish button is basically performing the build element of our continuous integration. The ARM templates can then be deployed to the higher environments using an Azure DevOps release pipeline as part of the continuous deployment. There is a manual process for the build element of the continuous integration and an automated deployment.
+
+### Getting to know Azure DevOps
+
+Is basically a SaaS offered by Microsoft on the Azure cloud with all the necessary tools to implement a DevOps project from end to end.
+
+**Key services:**
+
+- Boards: Management capability for Agile, Kan-Ban or SCRUM processes. Track progress and generate reports
+- Repos: Source control to manage our code. It supports the most popular version of the git as well as Team Foundation Version Control (TFVC)
+- Azure Pipelines: Build and release services to support CI/CD
+- Test Plans: Browsed based test management solution. It provides all the capabilities for planned manual testing, User Acceptance Testing (UAT) and exploratory testing. Gather feedback from stakeholders and respond to them
+- Artifacts: Library service to store packages or development artifacts that can be shared or used within the project.
+
+**How are projects organized within Azure DevOps**
+
+- When you connect to Azure DevOps, you will be connecting to an organization
+- An organization is a container for a collection of projects
+- Within an organization you can create different projects
+- Each project will have its own Boards, Repos, Pipelines, Test Plans and Artifacts
+- You can create teams that can work on more than one project
+
+**Getting started**
+
+- Access to dev.azure.com
+- Sign In using your Azure account
+- **Switch directory to the one that has all the resources that you have created**
+- In order to find the right directory you can look for it on the Azure portal at your profile
+- Select a Country/Region
+- Define an organization name (it has to be a unique name)
+- Once in your organization you can create new projects:
+  - You have to give a project name
+  - Add a description
+  - Stablish your project's visibility
+  - Select a version control
+  - Define a Work Item Process which will be important for our boards.
