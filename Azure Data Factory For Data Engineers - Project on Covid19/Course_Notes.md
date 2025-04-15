@@ -471,3 +471,99 @@ Right now we have successfully completed the release pipeline to deploy to the T
 10. In our case, look for the Pre-deployment approvals and enable it .
 11. Add your approvers and the Timeout.
 12. Save your changes.
+
+### Continuous Deployment - Option 2
+
+In option 1 we couldn't automate the Build stage since we had to manually publish the changes from our main branch every time a PR was completed in order to update the ARM Template and trigger the release Pipeline. The publish button offered two things related to that build:
+
+- Validated the data factory resources
+- Generated the ARM Template and stored it in the adf_publish branch
+
+It would be nice to automate this validation and ARM Template creation as soon as the PR has been completed. Azure now offers an npm package called Azure Data Factory Utilities that offers these capabilities.
+
+We can create a DevOps Build Pipeline to invoke this build package. On every successful Build, the pipeline will create the Build artifact with the ARM Template. We can then change the release pipeline to consume the ARM Template from the Build artifact. Now, the release pipeline has to deploy the ARM Template to the three Data Factories. This option is a fully automated CI/CD solution.
+
+[Check out the Microsoft documentation for this approach](https://learn.microsoft.com/en-us/azure/data-factory/continuous-integration-delivery-improvements)
+
+Option two approach:
+![alt text](image-9.png)
+
+#### YAML Build Pipeline Script Walkthrough
+
+First we will look at the [package.json](./package.json) . It has the information/instructions to install the Azure Data Factory Utilities NPM package.
+
+The second file will be the [yaml configuration file](./adf-ci-option-2-build-pipeline.yml). This is the Build pipeline
+
+**Important settings of the Build pipeline:**
+
+1. Trigger: It will be triggered as soon as we merged changes to the collaboration branch (main branch)
+2. vmImage: OS that we will be using to run the NPM package
+3. Variable definition: Everything that we ned to perform the Build from the dev DataFactory. Change these variables to your values. Just keep in mind that these variables point to your dev DataFactory. The PackageFolder is the folder were you will keep the package.json file. For the adfRootFolder, when we configured the dev data factory to use Git as the Repository, it asked us to specify a root folder if we wanted to which we leaved as blank (In our case).
+4. We don't need tasks so we will only create the five tasks needed for the Build process.
+5. The first task will install Nodejs in the vmImage
+6. The second one installs the NPM package in the vmImage
+7. The third task validates all the data Factory resources by running the NPM package and validating our source data factory (dev in our case but it will be the one you set to work with a Git repository). In this task we will be using our pipeline variables.
+8. The fourth task will generate the ARM Template and store it in a destination folder. This task is equivalent to clicking the Publish button from the previous approach.
+9. The fifth and final task will publish the ARM Template to the artifact library so that the release pipeline can consume that artifact.
+
+Now that we understand the content of each file, we need to add them to the Git Repository with our development process (feature branch, PR, etc).
+
+1. Crete a new feature branch
+2. Create a new folder called build
+3. Add the package.json and the YAML configuration files to that folder.
+4. Create the PR
+5. Complete the PR when approved
+6. Once it's merged you will have these files in the main branch.
+
+#### Create the YAML Build Pipeline
+
+1. Navigate to the Pipeline section
+2. Click on the "Pipelines" button
+3. Click on Create Pipeline
+4. Select the Azure Repos Git option, since we have just placed the yaml file inside the build folder in the main branch.
+5. Browse to your repo and select it.
+6. You will have some templates but you can also start a pipeline from scratch. We will select the "Existing Azure Pipelines YAML file" option since we already have the YAML file.
+7. Select the main branch
+8. Select the path to the YAML file. It will be located inside the build folder you created.
+9. This will import the YAML file.
+10. Save the Pipeline by clicking the dropdown and selecting the save option.
+11. Change the pipeline name to a meaningful name since it will be saved with the repo name.
+12. Test your pipeline.
+
+#### Update the Release Pipeline
+
+We need to create a release pipeline that consumes the ARM Template published as an artifact in the Build Pipeline. We will just clone the pipeline from Option 1 and make the changes.
+
+1. Clone the Option 1 pipeline
+2. Rename the pipeline
+3. Delete the artifact that had the ARM Template from the adf_publish branch.
+4. Add the new artifact. In Option 1 the ARM Template came from the adf_publish branch but now it is available as an artifact.
+5. When creating the new artifact, select the Build source type
+6. Select your build pipeline (the one that generates the ARM Template as an Artifact)
+7. Select the latest version
+8. Click the add button.
+9. Update each task in order to use the new artifact.
+10. In the Pre Deployment inside the Script Arguments, update the armTemplate parameter with the new location
+11. In the ARM Template deployment task update the Template parameter.
+12. Browse the Linked artifacts and select ARMTemplateForFactory.json file
+13. Browse the Linked artifacts and select ARMTemplateParametersForFactory.json file
+14. In the Post Deployment inside the Script Arguments, update the armTemplate parameter with the new location
+15. Repeat steps 9 to 14 for the production stage.
+16. We have to add a new step in order to deploy the ARM Template to the Dev ADF (Previously we only deployed to Test and Prod ADF'S)
+17. This has to be the first stage since we want to first release to Dev ADF, then to the Test ADF and finally to the Prod ADF.
+18. Clone the test stage and rename the clone to Dev Stage
+19. Update the variables in order to match the Dev values (factoryName, location, resourceGroup)
+20. For the resourceGroup from your Dev ADF you have to grant contributor access to the Service Principal or create a new one that only has access to that specific resource group.
+
+#### Final result
+
+![alt text](image-10.png)
+
+Right now, we are just missing the fully automation for the CI/CD process. We have a trigger for the Build pipeline (every time there is a change in the main branch) but we need to add a trigger for the release pipeline in order to run after the build has completed.
+
+How to achieve this?
+
+1. Go to the release pipeline
+2. Locate the Build artifact
+3. Click the add trigger button
+4. Enable the Continuous deployment trigger. Every time a new build is available it will trigger the release pipeline.
