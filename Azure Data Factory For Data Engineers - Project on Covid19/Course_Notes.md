@@ -294,3 +294,180 @@ There are many branching strategies to work with Git. The recommendation is to h
 13. Define a Publish branch. It will contain the ARM template after each publish from the collaboration branch.
 14. You have the option to import any existing resources to the repository. This is useful if you have been using ADF in Live Mode but you wanna bring each resource into Git.
 15. Click apply. You will gain connection to the repo but will get an error related to the main branch (it's because of the branch policy).
+
+### ADF Code Development process using Git
+
+1. You have a new feature that requires new resources from ADF
+2. Create a feature branch. ADF will treat each of the saves as commits to the Git repository. When you create the new branch from ADF UI, it will be automatically published to Azure DevOps.
+3. Start your development process for the new feature. Each time you save your work it will be committed and pushed to Azure DevOps. You can also save specific resources from ADF or click Save All for your commit.
+4. Debug your changes.
+5. Create a PR if everything it's ok. The PR can be created using either Azure DevOps or in the ADF UI. In the ADF UI you can find this option by clicking on the branch selection dropdown, there you will find the option to create a pull request. It will open up a from within Azure DevOps were you can fill-in the information for your PR.
+6. The reviewers approves/rejects the PR.
+7. If approved, the feature branch could be merged to the collaboration branch.
+8. Complete your PR when it's approved. You will need to select the Merge type and the Post-completion options that you want.
+9. Beware that when you complete a PR if you selected the Post-completion option to delete the merged source branch (your feature branch) if you go back to ADF and you are still positioned on that branch, you will get an error when refreshing. You just have to select another existing branch to solve this error.
+10. When you checkout main from the ADF UI, you will now see the changes you just merged from your PR.
+
+### Continuous Integration Build - Option 1
+
+The first option is to use the adf_publish branch. These are the steps:
+
+1. Perform all the steps from the development process
+2. Once you have merged your feature branch into the collaboration branch you will see the changes from the collaboration branch
+3. Publish your collaboration branch. It will publish the changes to the Dev ADF Repository as well as the Git Repository(the ADF instance that has a version control enabled). It will also create the ARM Template.
+4. The ARM Template will live in the adf_publish branch
+5. If you want to access to the ADF repository before you publish your changes you just have to switch to Live Mode. This option can be found at the branch selection dropdown.
+6. Once you have published your changes if you switch to Live Mode you will now see the changes you just published from your source control.
+7. On DevOps you will see the new branch (adf_publish) which will contain a folder with the same name as the factory, to content of the folder will be:
+   - ARMTemplateForFactory.json: Contains all the information about the Data Factory, for example: The pipeline name, it's activities but also information about policies from the ADF, etc.
+   - ARMTemplateParameters.json: Has got the factoryName with the value of your ADF resource. The purpose of this file is that you gain the ability to change the value of the parameter so that you are able to deploy to other environments.
+
+### Continuous Deployment - Option 1
+
+The input for this process is the ARM Template in the adf?publish branch from the build process. We will need a release pipeline that will deploy the ARM Template to the TEST and PRODUCTION ADF's. It's unlikely that you will see a release pipeline which deploys to both test and production ADF'S at the same time, the common scenario is a release pipeline that deploys to a test data factory and only attempts to deploy to production factory after a successful deployment test. The release pipeline would look like this:
+
+![alt text](image-4.png)
+After a successful completion of the deployment to the test factory, it sends an approval request for a deployment to production. Once the request has been approve, the release pipeline then deploys the ARM Template to production.
+
+#### Jobs for the release pipeline
+
+1. The staring point will be the ARM Template which needs to be deployed to the test data factory.
+2. Azure DevOps provides a Job called ARM deployment. We can simply invoke the job with the required information about the ARM Template and the data factory details. This deployment comes with a couple of issues:
+   - The deployment via ARM Template can only add or update artifacts it doesn't delete any components. For example, if you deleted a pipeline, that won't take effect.
+   - The deployment fails if we try to update a data factory trigger which is currently active in the destination data factory. In order to solve this you can run a deployment script which will stop the triggers before the deployment and start them once the deployment completes.
+3. The script mentioned on point 2 is written in PowerShell, therefore, we need a pre-deployment PowerShell job as well as a post-deployment PowerShell job.
+4. We have to deploy to prod, in order to that we can create stages for the release pipeline.
+5. Create a stage for the first three steps of this process and give it a meaningful name (Test Stage for this example)
+6. Create another stage for the release to production with .
+7. The approval will be requested only when there is a successful deployment to the previous ADF (Test ADF).
+
+![alt text](image-5.png)
+
+#### Creating a release pipeline
+
+1. Enter to your project
+2. Go to the Pipelines section (left menu)
+3. From the dropdown menu of the Pipelines section, select Releases.
+4. Click on "New Pipeline"
+5. You can start from a template to speed up the creation of a release pipeline, but we will create it from scratch.
+6. Click on "Empty Job" button. You will see two sections for the Pipeline (Artifacts and Stages):
+   - Artifacts: Is the input or the source information we need for our pipeline. In our case it will be The ARM Template from the adf_publish branch.
+   - Stages: The two stages that we previously talked about in the Jobs for the release pipeline section (Test stage and Prod Stage).
+7. Click on "Add Artifact". You will have several options for your source type, in our case we will use the Azure Repos type.
+8. Select the Azure Repos source type.
+9. Select the project
+10. Select the repository name (that contains your adf_publish branch)
+11. Set the default branch, in our case it will be adf_publish since that's the branch that contains the ARM Template
+12. Set the Default Version as latest
+13. Click "Add" to save the artifact. Now we can use the artifact within our tasks
+14. Enter to the stage that you want to configure (Test)
+15. Add a task to the Agent Job for that Stage. Look for the "ARM template deployment"
+16. Fill in the parameters for that task:
+
+- Display name: Meaningful name, in this example ARM Template deployment: ADF Deployment
+- Deployment scope: Since we are working with Resource Groups, that is the option that you need to select
+- Azure Resource Manager connection: By the moment we haven't created any. In order to add one, click on your subscription, then you will have two options that will create a new service principal. The first will be to use the "Authorize" method which will give the Service Principal contributor access for the subscription, therefore, that Service Principal will have full contributor access to the entire subscription. For the second option (for production scenarios), you would want to restrict access only to specific resource groups. In order to only give access to certain resource groups, you have to click the extend button from the Azure Resource Manager Connection and click on "Advanced options" now you can set the specific Resource Group from which you will give the Service Principal access.
+- Subscription: The one where you have all your resources.
+- Action: You can either create/update a resource group but you can also delete a resource group. We just want to use the "Create or update resource group" action.
+- Resource group: Select the one with your destination ADF.
+- Location: Location where the resource group is.
+
+17. Set the Template options:
+
+- Template location: You have two options which are the Linked Artifact or the URL of the file. In our case we will need the first one.
+- Template: Browse Type the ARMTemplateForFactory.json file location
+- Template parameters: Type the ARMTemplateParametersForFactory.json file location
+- Override template parameters: It lets you override template parameters. We do have a parameter in our template which is the factory name. We need to override the value for the destination factory that we want (test ADF) for this stage of the Pipeline.
+- Deployment mode: There are three options which are:
+  1.  Incremental: It takes the objects/resources from the ARM Template and updates them within the resource group.
+  2.  Complete: Will delete any resource within the resource group and applies the ARM Template to that resource group. Remember that the ARM Template only has information about the ADF so if you had any other resource it will be deleted but not re-created after applying the Template.
+  3.  Validation Only: Just looks whether the ARM Template has got the right information and there are no syntax errors.
+
+18. Finally add a trigger to the Pipeline. The button can be found at the Artifacts selection.
+19. Enable the trigger
+20. Add a new filter which will be to include only the adf_publish branch. Each time that branch has new commits it will trigger the pipeline.
+
+#### Pitfalls of ARM deployment task
+
+As mentioned, this pipeline doesn't handle deletes to the ADF objects. Secondly, we cannot update and active triggers as part of the deployment, an update to an active trigger will result in failure during deployment. We need to fix them for a robust CI/CD pipeline.
+
+The solution for these issues will be the pre and post deployment tasks. In these stages we will add the script we just mentioned, to prepare the destination environment (Test ADF and Prod ADF) for the release.
+
+Pre deployment: Will stop the active triggers
+Post deployment: Will start the triggers after the deployment and will delete any objects that are not present in the ARM Template.
+
+![alt text](image-6.png)
+
+Microsoft has provided an official script to work around those issues [Microsoft documentation for Pre and post deployment](https://learn.microsoft.com/en-us/azure/data-factory/continuous-integration-delivery-sample-script)
+
+You can find the Script here [pre and post deployment script](./PrePostDeploymentScript.Ver2.ps1)
+
+#### Adding the script to the Release Pipeline
+
+1. Upload the file to DevOps. There are a lot of repos that have this Script into the adf_publish branch but this is not recommended since that branch is managed by ADF. It's a better approach to add it to the main branch and follow the proper development process.
+2. Create a new branch
+3. Add a folder called release
+4. Add a README.md file to indicate that in that folder you should only have files related to the release pipelines.
+5. Add the pre and PrePostDeploymentScript.Ver2.ps1 to that folder
+6. Create a PR to merge the changes
+7. Add the file as a new artifact within the pipeline we have previously created.
+8. This artifact will not have a trigger associated since we just want the release pipeline to run only when there are new changes in the adf_publish branch and our new artifact source is located in the main branch.
+9. Add a PowerShell task within the Test Stage.
+10. Fill-in the parameters:
+
+- Select your subscription
+- Since we have our file as an artifact we just have to select the "Script File Path" option.
+- Browse to your artifact and select the PrePostDeploymentScript.Ver2.ps1 file location
+- Provide the arguments for the script following the Microsoft Documentation:
+  ```sh
+  -armTemplate "$(System.DefaultWorkingDirectory)/<your-arm-template-location>" -ResourceGroupName <your-resource-group-name> -DataFactoryName <your-data-factory-name> -predeployment $true -deleteDeployment $false
+  ```
+- Select the Azure PowerShell version according to your needs, in this case we will select the "Latest Installed Version"
+
+11. Ensure that your new task runs before the ARM Template deployment task.
+    ![alt text](image-7.png)
+12. Clone the task you just created for the Post deployment task.
+13. Change the predeployment parameter to false
+14. Change the deleteDeployment parameter to true
+    ![alt text](image-8.png)
+
+#### Adding Pipeline variables
+
+As mentioned, we have different environments in which we want to deploy the ARM Template. At the moment, we have hard-coded values in the release pipeline which limit the scalability and creates a harder maintenance for the pipeline. We can use Pipeline variables so that it will be easier to maintain the code and for our specific scenario were we want to perform the same tasks but in different stages, by using variables we will just need to update the variables so that it works for the different destinations.
+
+By the time the hard-coded values for the ARM Template deployment are: The resource group, the Location and the DataFactory name.
+
+There are two types of variables which are (Keep in mind that variables are case sensitive):
+
+- Pipeline variables: For specific scenarios (we will be using this type)
+- Variable groups: Give us more flexibility
+
+1. We will add three variables which will store the value for the name of the resource group, the location and the DataFactory name.
+2. We can set a Scope for the variable, they can be global or they can exist only within an specific stage. Set the variables for the Test Stage
+3. Set each variable a value.
+4. Update the Pre deployment task by changing the hard-coded values for the variables.
+5. Update the ARM Template Deployment task by changing the hard-coded values for the variables.
+6. In order to use a Variable you just have to use the next syntax:
+
+```sh
+$(your_variable)
+```
+
+6. Update the post deployment task by changing the hard-coded values for the variables.
+
+#### Adding the production stage
+
+Right now we have successfully completed the release pipeline to deploy to the Test ADF. As discussed, we just need to create a new stage within the pipeline that we will call Prod Stage. This stage will have the same tasks from the Test Stage but pointing at the production Data Factory. The only difference that we will have between stages is that in order to run the Prod Stage we will need a manual approval process.
+
+1. Go to the release pipeline
+2. Add a new stage. In our scenario since the tasks will be the same from the Test Stage we will just clone that stage.
+3. Rename the stage as Prod
+4. Create the new variables (they will be automatically created as part of the clone process)
+5. They will be created at the Prod scope which is correct.
+6. Update the values from the variables in the Prod scope so that they reference the production resources.
+7. The Service Principal that we created only has access to the test resource group. We need to either create a new service principal that will have access to the production resource group or we can add the service principal from the test stage to the production resource group and assign it a contributor role for that resource group.
+8. Add the manual approval. In order to do that we have to add a trigger to the production stage.
+9. Click the lighting icon and configure your trigger based on your needs.
+10. In our case, look for the Pre-deployment approvals and enable it .
+11. Add your approvers and the Timeout.
+12. Save your changes.
