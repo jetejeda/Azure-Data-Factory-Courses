@@ -567,3 +567,143 @@ How to achieve this?
 2. Locate the Build artifact
 3. Click the add trigger button
 4. Enable the Continuous deployment trigger. Every time a new build is available it will trigger the release pipeline.
+
+## CI/CD Scenario - Data Lake Access
+
+So far we have just been dealing with Data Factory pipelines that don't access any other resources. Typically ADF pipelines will be accessing other storage solutions such as Azure Data Lake (DL) and SQL Databases. They will also execute workloads on other compute engines such as Databricks, HDInsight, etc.
+
+Typically each data factory will access its own storage, for example: Dev ADF will be interacting with a Dev DL while prod will be interacting with a Prod DL.
+
+With our current CI/CD solution, when the code has been deployed to the Test and Prod ADF'S, they will be pointing at the Dev Storages which is something we don't want to happen. Instead, we want them to be pointing at their own storages. In order to achieve this we can override the ARM Template parameters in the release pipelines.
+
+We also have to think about how the ADF gets the credentials and the access required in order to interact with their storages, compute engines, etc. Currently ADF offers 4 different authentication options which are:
+
+1. Access Key: Of the storage account to access it
+2. Service principal
+3. System Assign Managed Identity
+4. User Assign Managed Identity
+
+Out of these, the continuous deployment approach for the service principal and the Managed Identities are exactly the same, but the approach required for using the access the keys is different. We will look at both approaches starting with the system assign managed identity.
+
+**Remember that whenever possible, use managed identities for access as they are more secure**
+
+![alt text](image-11.png)
+
+### System Assigned Managed Identity to access a DL via ADF
+
+Azure assigns a Managed Identity to each of the data factory resources when they're deployed. Therefore, we don't need to explicitly create them as Azure takes care of that. As long as the Managed Identity has the required role assigned to the storage account, the Data Factory will be able to access the storage account.
+
+We need to assign the Storage Blob Data Contributor to the Managed Identity. With that role the ADF will have permission to read and write data from the storage account.
+
+#### Interacting with the Data Lake Storage via ADF
+
+Create a feature branch.
+
+As we previously saw, we have to create a Linked Service (LS) in order to connect to the DL via ADF. For The Authentication type we have to select "System Assign Managed Identity" which we previously created. Finally test the connection (it should succeed).
+
+Create a pipeline with a copy data activity and use your LinkedService to read and write the data from one container to another.
+
+Create a PR that will contain the new LS, the pipeline and both datasets you used for the copy activity. When you complete the PR it will trigger the CI/CD pipelines staring with the Build pipeline. After you release your changes to the Test and Prod ADF'S you will see the pipeline you just created. If you try to run the pipeline it will fail since inside the LinkedService we are pointing to the Dev Storage but we are currently in the Test or Prod ADF which don't have access to that storage, nor should they have.
+
+Test and Prod ADF'S need that pipeline, but they need to be pointing to their own resources/storages. We have to change the URL for the storage for every ADF that we will deploy the ARM Template to. We have to update the Release pipeline so when that ADF pipelines are deployed to Test and Prod, they are pointing at the corresponding data lake storages as well.
+
+**what to change in the ARM Template?**
+Navigate to the artifact and download the ARMTemplateParametersForFactory.json. Inside that file, there is a new parameter which represents the Linked Service, the value of that parameter is the URL to the Storage account, that's what we want to change depending on the environment/stage of the Release pipeline, just as we did with the Factory Name.
+
+##### Updating the release pipeline
+
+1. Navigate to your release pipeline
+2. Click the Edit button
+3. Go to variables and add a new variable for the lakeName in the Dev scope
+4. Assign the DataLake variable the name of the Dev DataLake
+5. Go to variables and add a new variable for the lakeName in the Test scope
+6. Assign the DataLake variable the name of the Test DataLake
+7. Go to variables and add a new variable for the lakeName in the Prod scope
+8. Assign the DataLake variable the name of the Prod DataLake
+9. Move over to the pipeline and enter to the first stage (Dev Stage)
+10. Navigate to the ARM Template Deployment task and update the "Override template parameters" option (the one were you updated the factoryName)
+11. Go back to your ARMTemplateParametersForFactory.json to copy the name of the parameter that has the Linked Service URL value.
+12. Add the new element to the override parameters list. Remember that both dataFactory and lakeName are variables from the current stage/scope of the pipeline. Each new parameter must be separate by an space character.
+
+```sh
+-factoryName "$(dataFactory)" -your_ls_name_properties_typeProperties_url "https://$(lakeName).dfs.core.windows.net/"
+```
+
+13. Repeat the process for the other two stages.
+14. Save your changes
+15. Test the changes
+
+Now on very release the linked services will be pointing to their corresponding resources depending on the environment we are on (Dev, Test or Prod)
+
+### Access Keys to access a DL via ADF
+
+Here there are two approaches. The first approach is to store the keys in the data factory Linked Service itself. As you may know, storing the keys in git is not a good idea. Data Factory won't store the keys in git, instead it auto-publishes the changes and stores the keys in the Data Factory Repository. The values in the git repository will be stored as blank. This will work for the Dev Environment, but when we release the changes to Test and Prod, the keys will be carried over as blank values because that is what it wll find in the ARM Templates. To workaround this we can store the keys in each of the environments in a key vault and ask the release pipeline to read the keys from the key vault and override the ARM Template parameters with the actual keys for each environment. The main issue here is that we are relying on the release pipeline to update the keys for each environment. It's a good practice to rotate the keys of any data lake every few weeks to ensure that they are not compromised. Every time we update a key, we not only need to update the key vault, we also need to do a deployment so that the keys are updated for each environment.
+
+The second approach is to get the Data Factory to get the keys from the key vault every time it needs, rather than storing the key in the data factory itself. With this approach we just need to update the key vault whenever the keys have been rotated. This is the recommended approach.
+
+#### Getting ADF to access the key vault
+
+We will need three new key vaults, one per environment.
+
+1. In the Azure portal and click on create a new resource
+2. Look for Key vault and click on create
+3. Fill-in the form. I recommend to add this resource to each resource group (Dev, Test, Prod)
+4. For the default permission select the "Vault Access Policy" as permission model
+5. Click Review + Create
+6. Once it's created we want to give ADF access to the key vault. Inside the Key Vault go to Access Policies
+7. Click on Create
+8. Select the Get and the List permissions on secrets
+9. Click next
+10. Select your Data Factory's service Principal
+11. Create the secrets on the Key Vault. Go to the Secrets menu
+12. Click on Generate/Import
+13. Fill-in the form. Keep in mind that the name you select has to be the same for every key Vault.
+14. Repeat the process for each environment
+
+##### Updating the release pipeline
+
+1. In ADF create a new Feature branch
+2. Create a new Linked Service (data lake storage gen2)
+3. Fill-in the form. For the "Account selection method" we have to select "Enter Manually"
+4. After you selected the Enter manually option it will display a URL and the two options for the key (hard code the Storage account and use the Azure Key Vault)
+5. In the URL param provide the URL for the storage account of the Dev storage
+6. Select the Azure Key Vault option.
+7. In order to connect to the Key Vault you will need a new Linked Service, created specifically to access the Key Vault.
+8. In that new Key Vault select the Azure subscription option and as Azure Key Vault name select your Dev key vault.
+9. For the authentication method select the "System Assign Managed Identity"
+10. Test the connection to the Key Vault.
+11. Provide the secret name that you want to access
+12. Select the Lates version of the Secret
+13. Test the connection to the Data Lake Storage.
+14. Click create
+15. Create a new pipeline with a copy activity
+16. For the datasets that you will create for source and sink, use the new Linked Service you just created.
+17. Debug your pipeline
+18. Create a PR for your feature branch
+19. After you have completed the PR, the Build and release pipelines will be triggered
+20. As you may know, the ARM Template deployed to Test will have the Linked Service pointing to the Dev Storage, we have to change that in the Release pipeline.
+
+##### Updating the release pipeline
+
+We created two new Linked Services, one for the storage and one for the Key Vault, we have to change both of them for each environment.
+
+1. Navigate to your release pipeline
+2. Click the Edit button
+3. Go to variables and add a new variable for the keyVault in the Dev scope
+4. Assign the keyVault variable the name of the Dev key Vault
+5. Go to variables and add a new variable for the lakeName in the Dev scope
+6. Assign the lakeName variable the name of the Dev DataLake
+7. Repeat the process for the other two stages
+8. Navigate to the ARM Template Deployment task and update the "Override template parameters" option (the one were you updated the factoryName)
+9. Go back to your ARMTemplateParametersForFactory.json to copy the name of the parameter that has the Linked Service URL value for both the Key Vault and the Storage account.
+10. Add the new elements to the override parameters list. Remember that everything within the $() notation are variables from the current stage/scope of the pipeline. Each new parameter must be separate by an space character.
+
+```sh
+-factoryName "$(dataFactory)" -your_ls_name_properties_typeProperties_url "https://$(lakeName).dfs.core.windows.net/" -your_kv_name_properties_typeProperties_url "https://$(keyVault).vault.azure.net/
+```
+
+13. Repeat the process for the other two stages.
+14. Save your changes
+15. Test the changes
+
+As mentioned, the secret name for the three Vaults had to be the same that because, we are not changing the secret name parameter (the secret that we set to access from the key vault inside that linked service)
